@@ -5,6 +5,7 @@
   "routes": [
     { "src": "/(.*)", "dest": "main.py" }
   ],
+  "regions": ["sin1"],
   "crons": [
     { "path": "/api/check-alerts", "schedule": "* * * * *" }
   ]
