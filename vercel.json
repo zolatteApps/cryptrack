@@ -6,6 +6,6 @@
     { "src": "/(.*)", "dest": "main.py" }
   ],
   "crons": [
-    { "path": "/api/check-alerts", "schedule": "*/1 * * * *" }
+    { "path": "/api/check-alerts", "schedule": "0 * * * *" }
   ]
 }
