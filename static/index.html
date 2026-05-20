@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Futures Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0d1117; color: #e6edf3; }
+    .card { background: #161b22; border: 1px solid #30363d; }
+    .pnl-pos { color: #3fb950; }
+    .pnl-neg { color: #f85149; }
+    .badge-long  { background: #1a3a2a; color: #3fb950; }
+    .badge-short { background: #3a1a1a; color: #f85149; }
+    tr:hover td { background: #1c2128; }
+    .triggered { opacity: 0.4; }
+    input, select { background: #21262d; border: 1px solid #30363d; color: #e6edf3; }
+    input:focus, select:focus { outline: none; border-color: #388bfd; }
+    .ws-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .ws-dot.connecting { background:#d29922; animation: pulse 1.2s infinite; }
+    .ws-dot.connected  { background:#3fb950; }
+    .ws-dot.error      { background:#f85149; }
+  </style>
+</head>
+<body class="min-h-screen p-4 font-mono text-sm">
+<div class="max-w-6xl mx-auto space-y-5">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <h1 class="text-xl font-bold tracking-wide">⚡ Futures Monitor</h1>
+    <div class="flex items-center gap-2 text-xs text-gray-400">
+      <span class="ws-dot connecting" id="ws-dot"></span>
+      <span id="ws-status">Connecting…</span>
+    </div>
+  </div>
+
+  <!-- Summary strip -->
+  <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+
+  <!-- Positions table -->
+  <div class="card rounded-lg overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr class="text-gray-400 text-xs uppercase border-b border-gray-700">
+          <th class="px-4 py-3 text-left">Symbol</th>
+          <th class="px-4 py-3 text-left">Side</th>
+          <th class="px-4 py-3 text-right">Size</th>
+          <th class="px-4 py-3 text-right">Entry</th>
+          <th class="px-4 py-3 text-right">Mark</th>
+          <th class="px-4 py-3 text-right">PnL (USDT)</th>
+          <th class="px-4 py-3 text-right">ROE %</th>
+          <th class="px-4 py-3 text-right w-8"></th>
+        </tr>
+      </thead>
+      <tbody id="positions-body">
+        <tr><td colspan="8" class="text-center py-8 text-gray-500">No positions added yet. Add one below.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Add position form -->
+  <div class="card rounded-lg p-5 space-y-3">
+    <h2 class="font-semibold">➕ Add Position</h2>
+    <form id="pos-form" class="flex flex-wrap gap-2 items-end">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Symbol</label>
+        <input id="p-symbol" type="text" placeholder="COLLECTUSDT" list="symbols-list" class="rounded px-3 py-1.5 w-36 uppercase" />
+        <datalist id="symbols-list"></datalist>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Side</label>
+        <select id="p-side" class="rounded px-3 py-1.5">
+          <option value="LONG">LONG</option>
+          <option value="SHORT">SHORT</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Size (qty)</label>
+        <input id="p-size" type="number" step="any" placeholder="266.05" class="rounded px-3 py-1.5 w-28" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Entry Price</label>
+        <input id="p-entry" type="number" step="any" placeholder="0.0601375" class="rounded px-3 py-1.5 w-32" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Leverage</label>
+        <input id="p-leverage" type="number" min="1" max="125" placeholder="15" class="rounded px-3 py-1.5 w-20" />
+      </div>
+      <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded transition-colors">
+        Add &amp; Watch
+      </button>
+    </form>
+  </div>
+
+  <!-- Alerts -->
+  <div class="card rounded-lg p-5 space-y-4">
+    <h2 class="font-semibold">🔔 PnL Alerts</h2>
+    <form id="alert-form" class="flex flex-wrap gap-2 items-end">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Position</label>
+        <select id="a-pos-select" class="rounded px-3 py-1.5 w-48">
+          <option value="">— pick position —</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Condition</label>
+        <select id="a-cond" class="rounded px-3 py-1.5">
+          <option value="gt">PnL ≥ (above)</option>
+          <option value="lt">PnL ≤ (below)</option>
+        </select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Threshold (USDT)</label>
+        <input id="a-threshold" type="number" step="0.01" placeholder="16.00" class="rounded px-3 py-1.5 w-28" />
+      </div>
+      <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-1.5 rounded transition-colors">
+        Add Alert
+      </button>
+    </form>
+    <div id="alerts-list"></div>
+  </div>
+
+  <!-- ntfy config + two-way messages -->
+  <div class="card rounded-lg p-5 space-y-3">
+    <h2 class="font-semibold text-gray-300">📱 Phone Notifications (ntfy)</h2>
+    <p class="text-xs text-gray-400">
+      Install the free <a href="https://ntfy.sh" target="_blank" class="text-blue-400 underline">ntfy</a> app on your phone → tap <strong>+</strong> → subscribe to your topic name below.
+    </p>
+    <div class="flex gap-2 items-center flex-wrap">
+      <input id="ntfy-topic" type="text" placeholder="e.g. dk-future"
+        class="rounded px-3 py-1.5 w-44 text-sm" />
+      <button onclick="saveNtfyTopic()" class="bg-gray-600 hover:bg-gray-500 px-3 py-1.5 rounded text-xs">Save &amp; Send test</button>
+      <span id="ntfy-status" class="text-xs text-gray-500"></span>
+    </div>
+    <!-- Two-way: messages received FROM phone -->
+    <div class="border-t border-gray-700 pt-3 space-y-2">
+      <div class="flex items-center justify-between">
+        <p class="text-xs text-gray-400">
+          <span class="text-white font-semibold">Two-way test:</span>
+          open the ntfy app → tap your topic → tap the ✏️ send icon → type anything → it appears here.
+        </p>
+        <button onclick="fetchMessages()" class="text-xs text-blue-400 hover:text-blue-300 ml-4 shrink-0">refresh</button>
+      </div>
+      <div id="ntfy-messages" class="space-y-1 max-h-40 overflow-y-auto text-xs"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-6 right-6 hidden bg-green-800 border border-green-600 text-white px-4 py-2 rounded shadow-lg text-sm"></div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────
+let positions  = [];   // [{id, symbol, side, size, entryPrice, leverage}]
+let alerts     = [];   // [{id, symbol, condition, threshold, triggered}]
+let ntfyTopic  = '';
+
+// ── Server-side storage helpers ──────────────────────────────────
+async function loadState() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) return;
+    const data = await res.json();
+    positions = data.positions || [];
+    alerts    = data.alerts    || [];
+    ntfyTopic = data.ntfy_topic || '';
+  } catch(e) { console.warn('loadState error', e); }
+}
+
+function saveState() {
+  fetch('/api/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ positions, alerts, ntfy_topic: ntfyTopic }),
+  }).catch(e => console.warn('saveState error', e));
+}
+let markPrices = {};               // {SYMBOL: float}
+let ws = null;
+let wsRetryDelay = 2000;
+let lastWsData = 0;                // timestamp of last WS message with price data
+let restPollInterval = null;
+
+// ── WebSocket to Binance public mark price streams ───────────────
+function buildStreamUrl() {
+  const symbols = [...new Set(positions.map(p => p.symbol.toLowerCase()))];
+  if (!symbols.length) return null;
+  const streams = symbols.map(s => `${s}@markPrice@1s`).join('/');
+  return `wss://fstream.binance.com/stream?streams=${streams}`;
+}
+
+function connectWS() {
+  if (ws) { ws.onclose = null; ws.close(); }
+  const url = buildStreamUrl();
+  if (!url) { setWsStatus('idle'); return; }
+
+  setWsStatus('connecting');
+  ws = new WebSocket(url);
+
+  ws.onopen = () => { wsRetryDelay = 2000; };
+
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    const d = msg.data || msg;
+    if (d.e === 'markPriceUpdate') {
+      markPrices[d.s] = parseFloat(d.p);
+      lastWsData = Date.now();
+      setWsStatus('ws-live');
+      renderPositions();
+      checkAlerts();
+    }
+  };
+
+  ws.onerror = () => {};
+  ws.onclose = () => {
+    setTimeout(connectWS, wsRetryDelay);
+    wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
+  };
+}
+
+// ── REST polling fallback (always runs, covers WS gaps) ──────────
+const REST_MARK = '/api/markprices'; // proxied server-side to avoid CORS
+
+async function fetchMarkPricesREST() {
+  if (!positions.length) return;
+  const symbols = [...new Set(positions.map(p => p.symbol))];
+  try {
+    // Fetch all at once — public endpoint, no auth needed
+    const res = await fetch(REST_MARK);
+    if (!res.ok) throw new Error(res.status);
+    const all = await res.json();
+    let updated = false;
+    all.forEach(item => {
+      if (symbols.includes(item.symbol)) {
+        markPrices[item.symbol] = parseFloat(item.markPrice);
+        updated = true;
+      }
+    });
+    if (updated) {
+      // Only show REST status if WebSocket hasn't sent data recently
+      if (Date.now() - lastWsData > 5000) setWsStatus('rest-live');
+      renderPositions();
+      checkAlerts();
+    }
+  } catch(e) {
+    if (Date.now() - lastWsData > 5000) setWsStatus('error');
+    console.warn('REST mark price fetch failed:', e);
+  }
+}
+
+function startRestPolling() {
+  if (restPollInterval) clearInterval(restPollInterval);
+  restPollInterval = setInterval(fetchMarkPricesREST, 2000);
+  fetchMarkPricesREST(); // immediate first fetch
+}
+
+function setWsStatus(state) {
+  const dot = document.getElementById('ws-dot');
+  const label = document.getElementById('ws-status');
+  if (state === 'ws-live') {
+    dot.className = 'ws-dot connected'; label.textContent = 'Live (WebSocket)';
+  } else if (state === 'rest-live') {
+    dot.className = 'ws-dot connected'; label.textContent = 'Live (REST)';
+  } else if (state === 'idle') {
+    dot.className = 'ws-dot connecting'; label.textContent = 'No positions';
+  } else if (state === 'error') {
+    dot.className = 'ws-dot error'; label.textContent = 'Fetch error — retrying…';
+  } else {
+    dot.className = 'ws-dot connecting'; label.textContent = 'Connecting…';
+  }
+}
+
+// ── PnL calculation ──────────────────────────────────────────────
+function calcPnl(pos) {
+  const mark = markPrices[pos.symbol];
+  if (mark == null) return { pnl: null, roe: null, mark: null };
+  const dir = pos.side === 'LONG' ? 1 : -1;
+  // size is stored as USDT notional; convert to base-currency qty first
+  const qty = Math.abs(pos.size) / pos.entryPrice;
+  const pnl = dir * (mark - pos.entryPrice) * qty;
+  const margin = Math.abs(pos.size) / pos.leverage;
+  const roe = margin ? (pnl / margin) * 100 : 0;
+  return { pnl, roe, mark };
+}
+
+// ── Render positions table ───────────────────────────────────────
+function fmt(n, d=6) { return n == null ? '—' : parseFloat(n).toFixed(d); }
+function sign(n) { return n >= 0 ? '+' : ''; }
+function pc(n) { return n == null ? '' : n >= 0 ? 'pnl-pos' : 'pnl-neg'; }
+
+function renderPositions() {
+  const tbody = document.getElementById('positions-body');
+  if (!positions.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">No positions. Add one below.</td></tr>';
+    renderSummary([]);
+    return;
+  }
+
+  const rows = positions.map(pos => {
+    const { pnl, roe, mark } = calcPnl(pos);
+    return { pos, pnl, roe, mark };
+  });
+
+  tbody.innerHTML = rows.map(({ pos, pnl, roe, mark }) => `
+    <tr class="border-b border-gray-800 transition-colors">
+      <td class="px-4 py-3 font-semibold">${pos.symbol}</td>
+      <td class="px-4 py-3">
+        <span class="px-2 py-0.5 rounded text-xs font-bold ${pos.side === 'LONG' ? 'badge-long' : 'badge-short'}">
+          ${pos.side} ${pos.leverage}x
+        </span>
+      </td>
+      <td class="px-4 py-3 text-right">${fmt(Math.abs(pos.size), 2)}</td>
+      <td class="px-4 py-3 text-right">${fmt(pos.entryPrice, 7)}</td>
+      <td class="px-4 py-3 text-right">${mark != null ? fmt(mark, 7) : '<span class="text-gray-500">waiting…</span>'}</td>
+      <td class="px-4 py-3 text-right font-semibold ${pc(pnl)}">
+        ${pnl != null ? sign(pnl) + fmt(pnl, 2) : '<span class="text-gray-500">—</span>'}
+      </td>
+      <td class="px-4 py-3 text-right ${pc(roe)}">
+        ${roe != null ? sign(roe) + fmt(roe, 2) + '%' : '—'}
+      </td>
+      <td class="px-4 py-3 text-right">
+        <button onclick="removePosition('${pos.id}')" class="text-gray-600 hover:text-red-400 text-xs">✕</button>
+      </td>
+    </tr>
+  `).join('');
+
+  renderSummary(rows);
+  refreshSymbolsList();
+}
+
+function renderSummary(rows) {
+  const validRows = rows.filter(r => r.pnl != null);
+  const totalPnl = validRows.reduce((s, r) => s + r.pnl, 0);
+  const avgRoe = validRows.length ? validRows.reduce((s, r) => s + r.roe, 0) / validRows.length : 0;
+  document.getElementById('summary').innerHTML = `
+    <div class="card rounded p-3"><div class="text-xs text-gray-400 mb-1">Positions</div><div class="text-lg font-bold">${positions.length}</div></div>
+    <div class="card rounded p-3"><div class="text-xs text-gray-400 mb-1">Total PnL</div><div class="text-lg font-bold ${pc(totalPnl)}">${validRows.length ? sign(totalPnl) + fmt(totalPnl, 2) + ' USDT' : '—'}</div></div>
+    <div class="card rounded p-3"><div class="text-xs text-gray-400 mb-1">Avg ROE</div><div class="text-lg font-bold ${pc(avgRoe)}">${validRows.length ? sign(avgRoe) + fmt(avgRoe, 2) + '%' : '—'}</div></div>
+    <div class="card rounded p-3"><div class="text-xs text-gray-400 mb-1">Updated</div><div class="text-sm font-bold">${new Date().toLocaleTimeString()}</div></div>
+  `;
+}
+
+function refreshSymbolsList() {
+  // Populate the alert position picker (symbol + side, unambiguous)
+  const sel = document.getElementById('a-pos-select');
+  const prev = sel.value; // preserve whatever the user already selected
+  sel.innerHTML = '<option value="">— pick position —</option>' +
+    positions.map(p =>
+      `<option value="${p.id}">${p.symbol} ${p.side} (entry: ${p.entryPrice})</option>`
+    ).join('');
+  if (prev) sel.value = prev; // restore selection after rebuild
+  // Also keep the Add Position symbol datalist populated
+  const dl = document.getElementById('symbols-list');
+  if (dl) dl.innerHTML = [...new Set(positions.map(p => p.symbol))]
+    .map(s => `<option value="${s}">`).join('');
+}
+
+// ── Add / remove positions ───────────────────────────────────────
+document.getElementById('pos-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const symbol   = document.getElementById('p-symbol').value.trim().toUpperCase();
+  const side     = document.getElementById('p-side').value;
+  const size     = parseFloat(document.getElementById('p-size').value);
+  const entry    = parseFloat(document.getElementById('p-entry').value);
+  const leverage = parseInt(document.getElementById('p-leverage').value) || 1;
+  if (!symbol || isNaN(size) || isNaN(entry)) return;
+
+  positions.push({ id: crypto.randomUUID(), symbol, side, size, entryPrice: entry, leverage });
+  saveState();
+  e.target.reset();
+  renderPositions();
+  connectWS();
+  startRestPolling();
+  showToast(`Watching ${symbol}`);
+});
+
+function removePosition(id) {
+  positions = positions.filter(p => p.id !== id);
+  saveState();
+  renderPositions();
+  connectWS();
+  startRestPolling();
+}
+
+// ── Alerts ───────────────────────────────────────────────────────
+function renderAlerts() {
+  const el = document.getElementById('alerts-list');
+  if (!alerts.length) { el.innerHTML = '<p class="text-xs text-gray-500">No alerts set.</p>'; return; }
+  el.innerHTML = alerts.map(a => {
+    const cond = a.condition === 'gt' ? '≥' : '≤';
+    const s = a.threshold >= 0 ? '+' : '';
+    return `<div class="flex items-center justify-between bg-gray-800 rounded px-3 py-2 mb-1 ${a.triggered ? 'triggered' : ''}">
+      <span>
+        <span class="font-semibold">${a.label || a.symbol}</span>
+        <span class="text-gray-400 mx-2">PnL ${cond}</span>
+        <span class="font-semibold ${a.threshold >= 0 ? 'pnl-pos' : 'pnl-neg'}">${s}$${parseFloat(a.threshold).toFixed(2)}</span>
+        ${a.triggered ? '<span class="ml-3 text-xs text-yellow-400">✓ fired</span>' : ''}
+      </span>
+      <div class="flex gap-3">
+        ${a.triggered ? `<button onclick="resetAlert('${a.id}')" class="text-xs text-blue-400 hover:text-blue-300">reset</button>` : ''}
+        <button onclick="deleteAlert('${a.id}')" class="text-xs text-red-400 hover:text-red-300">delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('alert-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const positionId = document.getElementById('a-pos-select').value;
+  const condition  = document.getElementById('a-cond').value;
+  const threshold  = parseFloat(document.getElementById('a-threshold').value);
+  if (!positionId || isNaN(threshold)) return;
+  const pos = positions.find(p => p.id === positionId);
+  if (!pos) return;
+  const label = `${pos.symbol} ${pos.side}`;
+  alerts.push({ id: crypto.randomUUID(), positionId, label, condition, threshold, triggered: false });
+  saveState();
+  e.target.reset();
+  renderAlerts();
+  showToast('Alert added!');
+});
+
+function deleteAlert(id) { alerts = alerts.filter(a => a.id !== id); saveState(); renderAlerts(); }
+function resetAlert(id)  { alerts = alerts.map(a => a.id === id ? {...a, triggered: false} : a); saveState(); renderAlerts(); }
+
+// ── Check alerts on every price tick ────────────────────────────
+const firedAt = {};  // debounce: {alertId: timestamp} — re-arm after 60s silence
+
+function checkAlerts() {
+  let changed = false;
+  alerts.forEach(a => {
+    if (a.triggered) return;
+    const pos = positions.find(p => p.id === (a.positionId || null)) ||
+                positions.find(p => p.symbol === a.symbol); // legacy fallback
+    if (!pos) return;
+    const { pnl } = calcPnl(pos);
+    if (pnl == null) return;
+    const hit = (a.condition === 'gt' && pnl >= a.threshold) ||
+                (a.condition === 'lt' && pnl <= a.threshold);
+    if (!hit) return;
+
+    // Debounce: only fire once per 60 s per alert
+    const now = Date.now();
+    if (firedAt[a.id] && now - firedAt[a.id] < 60000) return;
+    firedAt[a.id] = now;
+
+    a.triggered = true;
+    changed = true;
+
+    const { roe, mark } = calcPnl(pos);
+    const pnlStr  = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+    const roeStr  = (roe >= 0 ? '+' : '') + roe.toFixed(1) + '%';
+    const condStr = a.condition === 'gt' ? '≥' : '≤';
+    const dirEmoji = pnl >= 0 ? '📈' : '📉';
+    const sideEmoji = pos.side === 'LONG' ? '🟢' : '🔴';
+
+    // e.g. "📈 COLLECTUSDT SHORT · +$8.34 (+50.9%)"
+    const title = `${dirEmoji} ${a.label || pos.symbol + ' ' + pos.side} · ${pnlStr} USDT (${roeStr})`;
+
+    // e.g. "Alert: PnL ≥ $8.00  |  🔴 SHORT  |  Entry 0.0516 → Mark 0.0501"
+    const msg = [
+      `Alert: PnL ${condStr} $${Math.abs(a.threshold).toFixed(2)}`,
+      `${sideEmoji} ${pos.side}  Entry ${pos.entryPrice}`,
+      `Mark ${mark != null ? mark.toFixed(7) : '—'}`,
+      `ROE ${roeStr}`,
+    ].join('  |  ');
+
+    // Browser notification
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body: msg, icon: '/static/icon.png' });
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') new Notification(title, { body: msg });
+      });
+    }
+
+    // ntfy push notification — sent directly from browser, no server needed
+    const topic = getNtfyTopic();
+    if (topic) ntfySend(topic, title, msg).catch(() => {});
+
+    showToast(`🚨 ${a.label || a.symbol} alert fired!`, 5000);
+  });
+  if (changed) { saveState(); renderAlerts(); }
+}
+
+// ── ntfy config ──────────────────────────────────────────────────
+function getNtfyTopic() { return ntfyTopic; }
+
+async function ntfySend(topic, title, message) {
+  // Route through backend proxy — direct browser→ntfy.sh is blocked by CORS
+  return fetch('/api/notify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, title, message }),
+  });
+}
+
+function saveNtfyTopic() {
+  const val = document.getElementById('ntfy-topic').value.trim();
+  if (!val) return;
+  ntfyTopic = val;
+  saveState();
+  const el = document.getElementById('ntfy-status');
+  el.textContent = 'Sending…';
+  el.className = 'text-xs text-gray-400';
+
+  ntfySend(val, '✅ Crypto Monitor', 'Connection test — if you see this, notifications are working!')
+    .then(r => {
+      if (r.ok) {
+        el.textContent = `✓ test sent to "${val}"`;
+        el.className = 'text-xs text-green-400';
+        setTimeout(fetchMessages, 2000);
+      } else {
+        el.textContent = `⚠ ntfy error ${r.status}`;
+        el.className = 'text-xs text-yellow-400';
+      }
+    })
+    .catch(() => {
+      el.textContent = '⚠ could not reach ntfy.sh';
+      el.className = 'text-xs text-yellow-400';
+    });
+}
+
+// ── Incoming messages from phone ─────────────────────────────────
+async function fetchMessages() {
+  const topic = getNtfyTopic();
+  if (!topic) return;
+  try {
+    const res = await fetch(`/api/messages?topic=${encodeURIComponent(topic)}&since=6h`);
+    if (!res.ok) return;
+    const msgs = await res.json();
+    const el = document.getElementById('ntfy-messages');
+    if (!msgs.length) {
+      el.innerHTML = '<p class="text-gray-600">No messages yet. Send one from the ntfy app to see it here.</p>';
+      return;
+    }
+    el.innerHTML = msgs.map(m => {
+      const time = new Date(m.time * 1000).toLocaleTimeString();
+      const title = m.title ? `<span class="text-white font-semibold">${m.title}</span> · ` : '';
+      return `<div class="bg-gray-800 rounded px-3 py-1.5 flex justify-between gap-4">
+        <span>${title}${m.message || ''}</span>
+        <span class="text-gray-500 shrink-0">${time}</span>
+      </div>`;
+    }).join('');
+  } catch(e) { console.warn('fetchMessages error', e); }
+}
+
+// ── Toast ────────────────────────────────────────────────────────
+function showToast(msg, ms=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(() => t.classList.add('hidden'), ms);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  await loadState();
+  if (ntfyTopic) document.getElementById('ntfy-topic').value = ntfyTopic;
+  if (Notification.permission === 'default') Notification.requestPermission();
+  renderPositions();
+  renderAlerts();
+  connectWS();
+  startRestPolling();
+  fetchMessages();
+  setInterval(fetchMessages, 8000);
+}
+init();
+</script>
+</body>
+</html>
