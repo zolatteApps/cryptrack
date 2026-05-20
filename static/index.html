@@ -382,12 +382,29 @@ function removePosition(id) {
 }
 
 // ── Alerts ───────────────────────────────────────────────────────
+let editingAlertId = null;
+
 function renderAlerts() {
   const el = document.getElementById('alerts-list');
   if (!alerts.length) { el.innerHTML = '<p class="text-xs text-gray-500">No alerts set.</p>'; return; }
   el.innerHTML = alerts.map(a => {
     const cond = a.condition === 'gt' ? '≥' : '≤';
     const s = a.threshold >= 0 ? '+' : '';
+
+    if (editingAlertId === a.id) {
+      return `<div class="flex items-center gap-2 bg-gray-800 rounded px-3 py-2 mb-1 flex-wrap">
+        <span class="font-semibold text-xs shrink-0">${a.label || a.symbol}</span>
+        <select id="edit-cond-${a.id}" class="rounded px-2 py-1 text-xs">
+          <option value="gt" ${a.condition === 'gt' ? 'selected' : ''}>PnL ≥ (above)</option>
+          <option value="lt" ${a.condition === 'lt' ? 'selected' : ''}>PnL ≤ (below)</option>
+        </select>
+        <input id="edit-thresh-${a.id}" type="number" step="0.01" value="${a.threshold}"
+          class="rounded px-2 py-1 text-xs w-24" />
+        <button onclick="saveAlert('${a.id}')" class="text-xs text-green-400 hover:text-green-300">save</button>
+        <button onclick="cancelEdit()" class="text-xs text-gray-400 hover:text-gray-300">cancel</button>
+      </div>`;
+    }
+
     return `<div class="flex items-center justify-between bg-gray-800 rounded px-3 py-2 mb-1 ${a.triggered ? 'triggered' : ''}">
       <span>
         <span class="font-semibold">${a.label || a.symbol}</span>
@@ -397,6 +414,7 @@ function renderAlerts() {
       </span>
       <div class="flex gap-3">
         ${a.triggered ? `<button onclick="resetAlert('${a.id}')" class="text-xs text-blue-400 hover:text-blue-300">reset</button>` : ''}
+        <button onclick="startEditAlert('${a.id}')" class="text-xs text-gray-400 hover:text-white">edit</button>
         <button onclick="deleteAlert('${a.id}')" class="text-xs text-red-400 hover:text-red-300">delete</button>
       </div>
     </div>`;
@@ -421,6 +439,19 @@ document.getElementById('alert-form').addEventListener('submit', e => {
 
 function deleteAlert(id) { alerts = alerts.filter(a => a.id !== id); saveState(); renderAlerts(); }
 function resetAlert(id)  { alerts = alerts.map(a => a.id === id ? {...a, triggered: false} : a); saveState(); renderAlerts(); }
+
+function startEditAlert(id) { editingAlertId = id; renderAlerts(); }
+function cancelEdit()       { editingAlertId = null; renderAlerts(); }
+function saveAlert(id) {
+  const cond   = document.getElementById(`edit-cond-${id}`).value;
+  const thresh = parseFloat(document.getElementById(`edit-thresh-${id}`).value);
+  if (isNaN(thresh)) return;
+  alerts = alerts.map(a => a.id === id ? { ...a, condition: cond, threshold: thresh, triggered: false } : a);
+  editingAlertId = null;
+  saveState();
+  renderAlerts();
+  showToast('Alert updated!');
+}
 
 // ── Check alerts on every price tick ────────────────────────────
 const firedAt = {};  // debounce: {alertId: timestamp} — re-arm after 60s silence
