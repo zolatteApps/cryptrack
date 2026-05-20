@@ -45,10 +45,10 @@
         <tr class="text-gray-400 text-xs uppercase border-b border-gray-700">
           <th class="px-4 py-3 text-left">Symbol</th>
           <th class="px-4 py-3 text-left">Side</th>
+          <th class="px-4 py-3 text-right">PnL (USDT)</th>
           <th class="px-4 py-3 text-right">Size</th>
           <th class="px-4 py-3 text-right">Entry</th>
           <th class="px-4 py-3 text-right">Mark</th>
-          <th class="px-4 py-3 text-right">PnL (USDT)</th>
           <th class="px-4 py-3 text-right">ROE %</th>
           <th class="px-4 py-3 text-right w-8"></th>
         </tr>
@@ -308,12 +308,12 @@ function renderPositions() {
           ${pos.side} ${pos.leverage}x
         </span>
       </td>
-      <td class="px-4 py-3 text-right">${fmt(Math.abs(pos.size), 2)}</td>
-      <td class="px-4 py-3 text-right">${fmt(pos.entryPrice, 7)}</td>
-      <td class="px-4 py-3 text-right">${mark != null ? fmt(mark, 7) : '<span class="text-gray-500">waiting…</span>'}</td>
       <td class="px-4 py-3 text-right font-semibold ${pc(pnl)}">
         ${pnl != null ? sign(pnl) + fmt(pnl, 2) : '<span class="text-gray-500">—</span>'}
       </td>
+      <td class="px-4 py-3 text-right">${fmt(Math.abs(pos.size), 2)}</td>
+      <td class="px-4 py-3 text-right">${fmt(pos.entryPrice, 7)}</td>
+      <td class="px-4 py-3 text-right">${mark != null ? fmt(mark, 7) : '<span class="text-gray-500">waiting…</span>'}</td>
       <td class="px-4 py-3 text-right ${pc(roe)}">
         ${roe != null ? sign(roe) + fmt(roe, 2) + '%' : '—'}
       </td>
