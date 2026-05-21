@@ -39,22 +39,35 @@
   <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
 
   <!-- Positions table -->
-  <div class="card rounded-lg overflow-x-auto">
+  <div class="card rounded-lg overflow-x-auto relative">
+    <button onclick="toggleColPanel(event)" class="absolute top-2 right-2 text-gray-500 hover:text-white text-sm z-10" title="Toggle columns">⊞</button>
+    <div id="col-panel" class="hidden absolute top-8 right-2 bg-gray-800 border border-gray-700 rounded shadow-lg p-3 z-20 text-xs space-y-1 min-w-max">
+      <div class="text-gray-400 mb-2 font-semibold">Columns</div>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="symbol" onchange="setColVisible('symbol',this.checked)" checked> Symbol</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="side"   onchange="setColVisible('side',this.checked)"   checked> Side</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="pnl"    onchange="setColVisible('pnl',this.checked)"    checked> PnL (USDT)</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="size"   onchange="setColVisible('size',this.checked)"   checked> Size</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="entry"  onchange="setColVisible('entry',this.checked)"  checked> Entry</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="mark"   onchange="setColVisible('mark',this.checked)"   checked> Mark</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="liq"    onchange="setColVisible('liq',this.checked)"    checked> Liq Price</label>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" data-col="roe"    onchange="setColVisible('roe',this.checked)"    checked> ROE %</label>
+    </div>
     <table class="w-full">
       <thead>
         <tr class="text-gray-400 text-xs uppercase border-b border-gray-700">
-          <th class="px-4 py-3 text-left">Symbol</th>
-          <th class="px-4 py-3 text-left">Side</th>
-          <th class="px-4 py-3 text-right">PnL (USDT)</th>
-          <th class="px-4 py-3 text-right">Size</th>
-          <th class="px-4 py-3 text-right">Entry</th>
-          <th class="px-4 py-3 text-right">Mark</th>
-          <th class="px-4 py-3 text-right">ROE %</th>
+          <th data-col="symbol" class="px-4 py-3 text-left">Symbol</th>
+          <th data-col="side"   class="px-4 py-3 text-left">Side</th>
+          <th data-col="pnl"    class="px-4 py-3 text-right">PnL (USDT)</th>
+          <th data-col="size"   class="px-4 py-3 text-right">Size</th>
+          <th data-col="entry"  class="px-4 py-3 text-right">Entry</th>
+          <th data-col="mark"   class="px-4 py-3 text-right">Mark</th>
+          <th data-col="liq"    class="px-4 py-3 text-right">Liq Price</th>
+          <th data-col="roe"    class="px-4 py-3 text-right">ROE %</th>
           <th class="px-4 py-3 text-right w-8"></th>
         </tr>
       </thead>
       <tbody id="positions-body">
-        <tr><td colspan="8" class="text-center py-8 text-gray-500">No positions added yet. Add one below.</td></tr>
+        <tr><td colspan="9" class="text-center py-8 text-gray-500">No positions added yet. Add one below.</td></tr>
       </tbody>
     </table>
   </div>
@@ -86,6 +99,10 @@
       <div class="flex flex-col gap-1">
         <label class="text-xs text-gray-400">Leverage</label>
         <input id="p-leverage" type="number" min="1" max="125" placeholder="15" class="rounded px-3 py-1.5 w-20" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-gray-400">Liq Price <span class="text-gray-600">(opt)</span></label>
+        <input id="p-liqprice" type="number" step="any" placeholder="e.g. 9.27" class="rounded px-3 py-1.5 w-32" />
       </div>
       <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded transition-colors">
         Add &amp; Watch
@@ -147,6 +164,28 @@
   </div>
 
   <div id="toast" class="fixed bottom-6 right-6 hidden bg-green-800 border border-green-600 text-white px-4 py-2 rounded shadow-lg text-sm"></div>
+
+  <div id="alert-modal" onclick="closeAlertModal()" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden">
+    <div onclick="event.stopPropagation()" class="bg-gray-900 border border-gray-700 rounded-lg p-5 w-80 shadow-xl">
+      <h3 class="text-white font-semibold mb-3">Add Alert — <span id="alert-modal-symbol" class="text-yellow-400"></span></h3>
+      <div class="mb-3">
+        <label class="text-gray-400 text-xs block mb-1">Condition</label>
+        <select id="modal-cond" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white">
+          <option value="gt">PnL ≥ (above)</option>
+          <option value="lt">PnL ≤ (below)</option>
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="text-gray-400 text-xs block mb-1">Threshold ($)</label>
+        <input id="modal-threshold" type="number" step="0.01" placeholder="e.g. 50"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-white" />
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button onclick="closeAlertModal()" class="text-xs text-gray-400 hover:text-white px-3 py-1">Cancel</button>
+        <button onclick="submitAlertModal()" class="text-xs bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1 rounded">Add Alert</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -154,6 +193,40 @@
 let positions  = [];   // [{id, symbol, side, size, entryPrice, leverage}]
 let alerts     = [];   // [{id, symbol, condition, threshold, triggered}]
 let ntfyTopic  = '';
+let editingPositionId = null;
+let filteredSymbol = null;
+
+const COL_KEYS = ['symbol','side','pnl','size','entry','mark','liq','roe'];
+let colVisible = Object.fromEntries(COL_KEYS.map(k => [k, true]));
+
+function colClass(col) { return colVisible[col] ? '' : 'hidden'; }
+
+function applyColVisibility() {
+  COL_KEYS.forEach(col => {
+    document.querySelectorAll(`th[data-col="${col}"]`)
+      .forEach(el => el.classList.toggle('hidden', !colVisible[col]));
+    const cb = document.querySelector(`#col-panel input[data-col="${col}"]`);
+    if (cb) cb.checked = colVisible[col];
+  });
+}
+
+function setColVisible(col, val) {
+  colVisible[col] = val;
+  saveState();
+  renderPositions();
+}
+
+function toggleColPanel(e) {
+  e.stopPropagation();
+  document.getElementById('col-panel').classList.toggle('hidden');
+}
+
+document.addEventListener('click', e => {
+  const panel = document.getElementById('col-panel');
+  if (panel && !panel.classList.contains('hidden') && !e.target.closest('#col-panel')) {
+    panel.classList.add('hidden');
+  }
+});
 
 // ── Server-side storage helpers ──────────────────────────────────
 async function loadState() {
@@ -161,9 +234,12 @@ async function loadState() {
     const res = await fetch('/api/state');
     if (!res.ok) return;
     const data = await res.json();
-    positions = data.positions || [];
-    alerts    = data.alerts    || [];
-    ntfyTopic = data.ntfy_topic || '';
+    positions  = data.positions   || [];
+    alerts     = data.alerts      || [];
+    ntfyTopic  = data.ntfy_topic  || '';
+    if (data.col_visible && Object.keys(data.col_visible).length) {
+      colVisible = { ...colVisible, ...data.col_visible };
+    }
   } catch(e) { console.warn('loadState error', e); }
 }
 
@@ -171,7 +247,7 @@ function saveState() {
   fetch('/api/state', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ positions, alerts, ntfy_topic: ntfyTopic }),
+    body: JSON.stringify({ positions, alerts, ntfy_topic: ntfyTopic, col_visible: colVisible }),
   }).catch(e => console.warn('saveState error', e));
 }
 let markPrices = {};               // {SYMBOL: float}
@@ -205,7 +281,7 @@ function connectWS() {
       markPrices[d.s] = parseFloat(d.p);
       lastWsData = Date.now();
       setWsStatus('ws-live');
-      renderPositions();
+      if (!editingPositionId) renderPositions();
       checkAlerts();
     }
   };
@@ -238,7 +314,7 @@ async function fetchMarkPricesREST() {
     if (updated) {
       // Only show REST status if WebSocket hasn't sent data recently
       if (Date.now() - lastWsData > 5000) setWsStatus('rest-live');
-      renderPositions();
+      if (!editingPositionId) renderPositions();
       checkAlerts();
     }
   } catch(e) {
@@ -290,7 +366,7 @@ function pc(n) { return n == null ? '' : n >= 0 ? 'pnl-pos' : 'pnl-neg'; }
 function renderPositions() {
   const tbody = document.getElementById('positions-body');
   if (!positions.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">No positions. Add one below.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-gray-500">No positions. Add one below.</td></tr>';
     renderSummary([]);
     return;
   }
@@ -300,31 +376,76 @@ function renderPositions() {
     return { pos, pnl, roe, mark };
   });
 
-  tbody.innerHTML = rows.map(({ pos, pnl, roe, mark }) => `
+  const visibleRows = filteredSymbol
+    ? rows.filter(({ pos }) => pos.symbol === filteredSymbol)
+    : rows;
+
+  tbody.innerHTML = visibleRows.map(({ pos, pnl, roe, mark }) => {
+    if (editingPositionId === pos.id) {
+      return `
     <tr class="border-b border-gray-800 transition-colors">
-      <td class="px-4 py-3 font-semibold">${pos.symbol}</td>
       <td class="px-4 py-3">
+        <input id="edit-symbol" value="${pos.symbol}" class="bg-gray-800 text-white text-xs rounded px-2 py-1 w-24 uppercase" style="text-transform:uppercase" />
+      </td>
+      <td class="px-4 py-3">
+        <select id="edit-side" class="bg-gray-800 text-white text-xs rounded px-2 py-1">
+          <option value="LONG" ${pos.side === 'LONG' ? 'selected' : ''}>LONG</option>
+          <option value="SHORT" ${pos.side === 'SHORT' ? 'selected' : ''}>SHORT</option>
+        </select>
+      </td>
+      <td class="px-4 py-3 text-right" colspan="2">
+        <span class="text-xs text-gray-400 mr-1">Size</span>
+        <input id="edit-size" type="number" value="${Math.abs(pos.size)}" step="any" class="bg-gray-800 text-white text-xs rounded px-2 py-1 w-24" />
+      </td>
+      <td class="px-4 py-3 text-right">
+        <input id="edit-entry" type="number" value="${pos.entryPrice}" step="any" class="bg-gray-800 text-white text-xs rounded px-2 py-1 w-28" />
+      </td>
+      <td class="px-4 py-3 text-right">
+        <span class="text-xs text-gray-400 mr-1">Lev</span>
+        <input id="edit-leverage" type="number" value="${pos.leverage}" min="1" max="125" class="bg-gray-800 text-white text-xs rounded px-2 py-1 w-16" />
+      </td>
+      <td class="px-4 py-3 text-right">
+        <input id="edit-liqprice" type="number" step="any" value="${pos.liqPrice ?? ''}" placeholder="liq"
+          class="bg-gray-800 text-white text-xs rounded px-2 py-1 w-24" />
+      </td>
+      <td></td>
+      <td class="px-4 py-3 text-right whitespace-nowrap">
+        <button onclick="saveEditPosition('${pos.id}')" class="text-green-400 hover:text-green-300 text-sm mr-2" title="Save">✓</button>
+        <button onclick="cancelEditPosition()" class="text-gray-500 hover:text-red-400 text-xs" title="Cancel">✕</button>
+      </td>
+    </tr>`;
+    }
+    return `
+    <tr class="border-b border-gray-800 transition-colors">
+      <td class="px-4 py-3 font-semibold ${colClass('symbol')}">
+        ${pos.symbol}<button onclick="toggleFilterSymbol('${pos.symbol}')" class="${filteredSymbol === pos.symbol ? 'text-blue-400' : 'text-gray-500'} hover:text-blue-300 text-xs ml-1.5" title="${filteredSymbol === pos.symbol ? 'Show all symbols' : 'Focus this symbol'}">👁</button>
+      </td>
+      <td class="px-4 py-3 ${colClass('side')}">
         <span class="px-2 py-0.5 rounded text-xs font-bold ${pos.side === 'LONG' ? 'badge-long' : 'badge-short'}">
           ${pos.side} ${pos.leverage}x
         </span>
       </td>
-      <td class="px-4 py-3 text-right font-semibold ${pc(pnl)}">
+      <td class="px-4 py-3 text-right font-semibold ${colClass('pnl')} ${pc(pnl)}">
         ${pnl != null ? sign(pnl) + fmt(pnl, 2) : '<span class="text-gray-500">—</span>'}
       </td>
-      <td class="px-4 py-3 text-right">${fmt(Math.abs(pos.size), 2)}</td>
-      <td class="px-4 py-3 text-right">${fmt(pos.entryPrice, 7)}</td>
-      <td class="px-4 py-3 text-right">${mark != null ? fmt(mark, 7) : '<span class="text-gray-500">waiting…</span>'}</td>
-      <td class="px-4 py-3 text-right ${pc(roe)}">
+      <td class="px-4 py-3 text-right ${colClass('size')}">${fmt(Math.abs(pos.size), 2)}</td>
+      <td class="px-4 py-3 text-right ${colClass('entry')}">${fmt(pos.entryPrice, 7)}</td>
+      <td class="px-4 py-3 text-right ${colClass('mark')}">${mark != null ? fmt(mark, 7) : '<span class="text-gray-500">waiting…</span>'}</td>
+      <td class="px-4 py-3 text-right ${colClass('liq')}">${pos.liqPrice != null ? fmt(pos.liqPrice, 5) : '<span class="text-gray-500">—</span>'}</td>
+      <td class="px-4 py-3 text-right ${colClass('roe')} ${pc(roe)}">
         ${roe != null ? sign(roe) + fmt(roe, 2) + '%' : '—'}
       </td>
-      <td class="px-4 py-3 text-right">
+      <td class="px-4 py-3 text-right whitespace-nowrap">
+        <button onclick="openAlertModal('${pos.id}')" class="text-gray-600 hover:text-yellow-400 text-xs mr-2" title="Add Alert">🔔</button>
+        <button onclick="startEditPosition('${pos.id}')" class="text-gray-400 hover:text-blue-400 text-sm mr-2" title="Edit">✎</button>
         <button onclick="removePosition('${pos.id}')" class="text-gray-600 hover:text-red-400 text-xs">✕</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   renderSummary(rows);
   refreshSymbolsList();
+  applyColVisibility();
 }
 
 function renderSummary(rows) {
@@ -362,9 +483,10 @@ document.getElementById('pos-form').addEventListener('submit', e => {
   const size     = parseFloat(document.getElementById('p-size').value);
   const entry    = parseFloat(document.getElementById('p-entry').value);
   const leverage = parseInt(document.getElementById('p-leverage').value) || 1;
+  const liqPrice = parseFloat(document.getElementById('p-liqprice').value) || null;
   if (!symbol || isNaN(size) || isNaN(entry)) return;
 
-  positions.push({ id: crypto.randomUUID(), symbol, side, size, entryPrice: entry, leverage });
+  positions.push({ id: crypto.randomUUID(), symbol, side, size, entryPrice: entry, leverage, liqPrice });
   saveState();
   e.target.reset();
   renderPositions();
@@ -379,6 +501,37 @@ function removePosition(id) {
   renderPositions();
   connectWS();
   startRestPolling();
+}
+
+function toggleFilterSymbol(symbol) {
+  filteredSymbol = filteredSymbol === symbol ? null : symbol;
+  renderPositions();
+}
+
+function startEditPosition(id) {
+  editingPositionId = id;
+  renderPositions();
+}
+
+function saveEditPosition(id) {
+  const pos = positions.find(p => p.id === id);
+  pos.symbol     = document.getElementById('edit-symbol').value.toUpperCase().trim();
+  pos.side       = document.getElementById('edit-side').value;
+  pos.size       = parseFloat(document.getElementById('edit-size').value);
+  pos.entryPrice = parseFloat(document.getElementById('edit-entry').value);
+  pos.leverage   = parseInt(document.getElementById('edit-leverage').value);
+  const liqP     = parseFloat(document.getElementById('edit-liqprice').value);
+  pos.liqPrice   = isNaN(liqP) ? null : liqP;
+  editingPositionId = null;
+  saveState();
+  renderPositions();
+  connectWS();
+  startRestPolling();
+}
+
+function cancelEditPosition() {
+  editingPositionId = null;
+  renderPositions();
 }
 
 // ── Alerts ───────────────────────────────────────────────────────
@@ -436,6 +589,45 @@ document.getElementById('alert-form').addEventListener('submit', e => {
   renderAlerts();
   showToast('Alert added!');
 });
+
+let alertModalPositionId = null;
+
+function openAlertModal(posId) {
+  const pos = positions.find(p => p.id === posId);
+  if (!pos) return;
+  alertModalPositionId = posId;
+  document.getElementById('alert-modal-symbol').textContent = `${pos.symbol} ${pos.side}`;
+  document.getElementById('modal-threshold').value = '';
+  document.getElementById('modal-cond').value = 'gt';
+  document.getElementById('alert-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('modal-threshold').focus(), 50);
+}
+
+function closeAlertModal() {
+  alertModalPositionId = null;
+  document.getElementById('alert-modal').classList.add('hidden');
+}
+
+function submitAlertModal() {
+  const threshold = parseFloat(document.getElementById('modal-threshold').value);
+  if (isNaN(threshold)) { showToast('Enter a valid threshold'); return; }
+  const condition = document.getElementById('modal-cond').value;
+  const pos = positions.find(p => p.id === alertModalPositionId);
+  if (!pos) return;
+  alerts.push({
+    id: crypto.randomUUID(),
+    positionId: alertModalPositionId,
+    label: `${pos.symbol} ${pos.side}`,
+    symbol: pos.symbol,
+    condition,
+    threshold,
+    triggered: false
+  });
+  saveState();
+  renderAlerts();
+  closeAlertModal();
+  showToast(`Alert added for ${pos.symbol}`);
+}
 
 function deleteAlert(id) { alerts = alerts.filter(a => a.id !== id); saveState(); renderAlerts(); }
 function resetAlert(id)  { alerts = alerts.map(a => a.id === id ? {...a, triggered: false} : a); saveState(); renderAlerts(); }
