@@ -36,9 +36,10 @@ def _read_state() -> dict:
             result = db.table("app_state").select("*").eq("id", 1).single().execute()
             if result.data:
                 return {
-                    "positions":  result.data.get("positions", []) or [],
-                    "alerts":     result.data.get("alerts", []) or [],
-                    "ntfy_topic": result.data.get("ntfy_topic", "") or "",
+                    "positions":   result.data.get("positions", []) or [],
+                    "alerts":      result.data.get("alerts", []) or [],
+                    "ntfy_topic":  result.data.get("ntfy_topic", "") or "",
+                    "col_visible": result.data.get("col_visible") or {},
                 }
         except Exception as e:
             print(f"[supabase] read error: {e}")
@@ -56,10 +57,11 @@ def _write_state(data: dict) -> None:
     if db:
         try:
             db.table("app_state").upsert({
-                "id":         1,
-                "positions":  data.get("positions", []),
-                "alerts":     data.get("alerts", []),
-                "ntfy_topic": data.get("ntfy_topic", ""),
+                "id":          1,
+                "positions":   data.get("positions", []),
+                "alerts":      data.get("alerts", []),
+                "ntfy_topic":  data.get("ntfy_topic", ""),
+                "col_visible": data.get("col_visible", {}),
             }).execute()
             return
         except Exception as e:
@@ -190,6 +192,7 @@ class StateModel(BaseModel):
     positions: List[Any] = []
     alerts: List[Any] = []
     ntfy_topic: str = ""
+    col_visible: dict = {}
 
 
 @app.get("/api/state")
